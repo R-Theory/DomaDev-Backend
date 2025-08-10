@@ -33,7 +33,7 @@ cp .env.example .env
 curl -s localhost:5050/health | jq
 ```
 
-Windows note: You can launch the gateway with `START-HERE.bat` or `start-backend.ps1`. Ensure your vLLM instance is reachable (e.g., WSL2 on `http://localhost:8000`).
+Windows note: You can launch the gateway with `scripts/windows/START-HERE.bat`. Ensure your vLLM instance is reachable (e.g., WSL2 on `http://localhost:8000`).
 
 ## Configuration (env)
 - `API_PORT` (default 5050) – server port. Fallback to `PORT`.
