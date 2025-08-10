@@ -10,7 +10,8 @@
 ## Prerequisites
 - WSL2 (Ubuntu 24.04)
 - Python 3.12
-- vLLM running locally (OpenAI-compatible server). Example script: `./scripts/start_vllm.sh`.
+- vLLM running on Ubuntu/WSL2 (OpenAI-compatible server). Example script: `./scripts/start_vllm.sh`.
+- Typical model: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`. The gateway runs on Linux or Windows and proxies vLLM.
 - Optional: HuggingFace token for gated models; set `HF_HOME` and `--download-dir` as needed.
 
 ## Quick start
@@ -32,25 +33,29 @@ cp .env.example .env
 curl -s localhost:5050/health | jq
 ```
 
+Windows note: You can launch the gateway with `START-HERE.bat` or `start-backend.ps1`. Ensure your vLLM instance is reachable (e.g., WSL2 on `http://localhost:8000`).
+
 ## Configuration (env)
 - `API_PORT` (default 5050) – server port. Fallback to `PORT`.
 - `LOG_LEVEL` – INFO, DEBUG, etc.
 - `ALLOW_ORIGINS` – CORS allowlist (CSV or `*`).
 - `API_KEY` – if set, required via `X-API-Key` for all endpoints except `/health` (and `/metrics` if `METRICS_PUBLIC=true`).
+- `AUTH_REQUIRED` – set `false` to disable auth even if `API_KEY` is set.
 - `METRICS_PUBLIC` – set `true` to expose `/metrics` without auth.
 - `MODEL_ROUTE_<KEY>=http://host:port/v1` – map a `modelKey` to a vLLM base URL.
 - `DEFAULT_MODEL_KEY` – default route key when not specified.
-- `DEFAULT_MODEL_NAME` – default model ID when not provided.
+- `DEFAULT_MODEL_NAME` – default model ID when not provided (e.g., `TinyLlama/TinyLlama-1.1B-Chat-v1.0`).
 - `ALLOWED_MODELS` – CSV allowlist (filters `/models` and validates requests).
 - `VLLM_BASE_URL` – legacy single-route fallback if `MODEL_ROUTE_*` not provided.
 - `RATE_LIMIT_PER_MIN` – per-IP capacity.
 - `USE_REDIS`/`REDIS_URL` – enable Redis-backed rate limiting.
 - `CONNECT_TIMEOUT_SECONDS`, `READ_TIMEOUT_SECONDS`, `WRITE_TIMEOUT_SECONDS`, `TOTAL_TIMEOUT_SECONDS` – upstream timeouts.
-- `PROMETHEUS_ENABLE` – enable `/metrics`.
+- `PROMETHEUS_ENABLE` – enable `/metrics` (default: true).
+- `SSE_HEARTBEAT_SECONDS` – heartbeat interval for `/api/chat/stream` (default 15).
 
-## Multi-instance routing
-- Provide routes: `MODEL_ROUTE_phi4=http://localhost:8000/v1`, `MODEL_ROUTE_tiny=http://localhost:8001/v1`.
-- Set `DEFAULT_MODEL_KEY=phi4`.
+## Multi-model routing (multi-instance)
+- Provide routes: `MODEL_ROUTE_tiny=http://localhost:8000/v1` (add more as needed).
+- Set `DEFAULT_MODEL_KEY=tiny`.
 - Requests can include `modelKey` to select the instance explicitly.
 - If no `modelKey`, the gateway attempts to infer the route by querying `/v1/models` (cached 10s). If exactly one instance serves the `model`, it routes there; otherwise 409.
 
@@ -58,7 +63,7 @@ curl -s localhost:5050/health | jq
 All routes are under `/api` (except `/health` and `/metrics`).
 
 ### GET /health
-Response:
+Response (derives `vllm` by probing the default/first route’s `/models`):
 ```json
 { "ok": true, "vllm": "ok|unavailable|unconfigured|unknown" }
 ```
@@ -69,7 +74,7 @@ Aggregates models from all routes, de-dupes by id, and includes sources and late
 {
   "object": "list",
   "data": [
-    { "id": "microsoft/Phi-4", "object": "model", "sources": [{"source": "phi4", "latency_ms": 42}] }
+    { "id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0", "object": "model", "sources": [{"source": "tiny", "latency_ms": 42}] }
   ]
 }
 ```
@@ -80,8 +85,8 @@ Body:
 ```json
 {
   "message": "Hello",
-  "model": "microsoft/Phi-4",
-  "modelKey": "phi4",
+  "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+  "modelKey": "tiny",
   "system": "You are helpful.",
   "temperature": 0.2,
   "max_tokens": 256
@@ -100,14 +105,15 @@ Curl example:
 ```bash
 curl -N -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"message":"Hello","model":"microsoft/Phi-4","modelKey":"phi4"}' \
+  -d '{"message":"Hello","model":"TinyLlama/TinyLlama-1.1B-Chat-v1.0","modelKey":"tiny"}' \
   http://localhost:5050/api/chat/stream
 ```
+Heartbeats are sent as SSE comments like `: keepalive` roughly every `SSE_HEARTBEAT_SECONDS` seconds.
 
 ### POST /api/embeddings
 Body:
 ```json
-{ "input": "some text", "model": "microsoft/Phi-4-mini", "modelKey": "phi4" }
+{ "input": "some text", "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0", "modelKey": "tiny" }
 ```
 Response is the upstream OpenAI-compatible JSON.
 
