@@ -14,8 +14,8 @@ router = APIRouter(prefix="/models")
 async def list_models() -> dict:
     settings = get_settings()
     aggregated = await route_registry.aggregate_models()
-    if settings.allowed_models:
-        allowed = set(settings.allowed_models)
+    if settings.allowed_models_list:
+        allowed = set(settings.allowed_models_list)
         aggregated = [m for m in aggregated if m.get("id") in allowed]
     # Return OpenAI-compatible envelope
     return {"object": "list", "data": aggregated}

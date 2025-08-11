@@ -15,6 +15,28 @@
 - Optional: HuggingFace token for gated models; set `HF_HOME` and `--download-dir` as needed.
 
 ## Quick start
+
+### Option 1: Dynamic Port Allocation (Recommended)
+```bash
+# 1) Create venv and install deps
+cd ai-backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2) Configure (optional - uses defaults)
+cp config.example.env .env
+# edit .env to customize settings
+
+# 3) Run API with dynamic port
+python start_server.py
+# or on Windows: start-dynamic.bat
+
+# 4) Health check (port will be shown in startup message)
+curl -s localhost:<PORT>/health | jq
+```
+
+### Option 2: Fixed Port
 ```bash
 # 1) Create venv and install deps
 cd ai-backend
@@ -23,8 +45,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # 2) Configure
-cp .env.example .env
-# edit .env to set MODEL_ROUTE_* and DEFAULT_MODEL_KEY/NAME
+cp config.example.env .env
+# edit .env: set API_PORT=5050 and AUTO_FIND_PORT=false
 
 # 3) Run API
 ./scripts/dev.sh
@@ -33,25 +55,43 @@ cp .env.example .env
 curl -s localhost:5050/health | jq
 ```
 
-Windows note: You can launch the gateway with `scripts/windows/START-HERE.bat`. Ensure your vLLM instance is reachable (e.g., WSL2 on `http://localhost:8000`).
+**Windows note**: You can launch the gateway with `scripts/windows/START-HERE.bat` (now uses dynamic port allocation) or use the new `start-dynamic.bat` for manual dynamic port allocation. The updated `START-HERE.bat` will automatically create a `.env` file with dynamic port configuration if one doesn't exist. Ensure your vLLM instance is reachable (e.g., WSL2 on `http://localhost:8000`).
 
 ## Configuration (env)
+
+### Server & Port Configuration
 - `API_PORT` (default 5050) – server port. Fallback to `PORT`.
+- `HOST` (default 0.0.0.0) – server host address.
+- `AUTO_FIND_PORT` (default false) – automatically find free port if `API_PORT` is busy.
+- `PORT_RANGE_START` (default 5050) – start of port range for auto-allocation.
+- `PORT_RANGE_END` (default 5100) – end of port range for auto-allocation.
 - `LOG_LEVEL` – INFO, DEBUG, etc.
+- `DEBUG` (default false) – enable debug mode.
+- `RELOAD` (default true) – auto-reload on code changes.
+
+### CORS & Security
 - `ALLOW_ORIGINS` – CORS allowlist (CSV or `*`).
 - `API_KEY` – if set, required via `X-API-Key` for all endpoints except `/health` (and `/metrics` if `METRICS_PUBLIC=true`).
 - `AUTH_REQUIRED` – set `false` to disable auth even if `API_KEY` is set.
 - `METRICS_PUBLIC` – set `true` to expose `/metrics` without auth.
+
+### vLLM Configuration
 - `MODEL_ROUTE_<KEY>=http://host:port/v1` – map a `modelKey` to a vLLM base URL.
 - `DEFAULT_MODEL_KEY` – default route key when not specified.
 - `DEFAULT_MODEL_NAME` – default model ID when not provided (e.g., `TinyLlama/TinyLlama-1.1B-Chat-v1.0`).
 - `ALLOWED_MODELS` – CSV allowlist (filters `/models` and validates requests).
 - `VLLM_BASE_URL` – legacy single-route fallback if `MODEL_ROUTE_*` not provided.
+
+### Performance & Monitoring
 - `RATE_LIMIT_PER_MIN` – per-IP capacity.
 - `USE_REDIS`/`REDIS_URL` – enable Redis-backed rate limiting.
 - `CONNECT_TIMEOUT_SECONDS`, `READ_TIMEOUT_SECONDS`, `WRITE_TIMEOUT_SECONDS`, `TOTAL_TIMEOUT_SECONDS` – upstream timeouts.
 - `PROMETHEUS_ENABLE` – enable `/metrics` (default: true).
 - `SSE_HEARTBEAT_SECONDS` – heartbeat interval for `/api/chat/stream` (default 15).
+
+### Database
+- `DATABASE_URL` – database connection URL (default: sqlite:///./data/ai_backend.db).
+- `DB_ECHO` – echo SQL queries for debugging.
 
 ## Multi-model routing (multi-instance)
 - Provide routes: `MODEL_ROUTE_tiny=http://localhost:8000/v1` (add more as needed).

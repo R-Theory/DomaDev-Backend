@@ -10,7 +10,7 @@ from ..deps import route_registry
 
 def _validate_model_allowed(model: str) -> None:
     settings = get_settings()
-    if settings.allowed_models and model not in settings.allowed_models:
+    if settings.allowed_models_list and model not in settings.allowed_models_list:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Model is not allowed by ALLOWED_MODELS",

@@ -43,7 +43,7 @@ def create_app() -> FastAPI:
     app.add_middleware(ApiKeyMiddleware)
 
     # CORS
-    allow_origins: List[str] = settings.allow_origins or ["*"]
+    allow_origins: List[str] = settings.allow_origins_list
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allow_origins,

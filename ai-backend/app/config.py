@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import os
+import socket
 from functools import lru_cache
 from typing import Dict, List, Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,15 +15,33 @@ def _parse_csv(value: Optional[str]) -> List[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def find_free_port(start_port: int = 5050, max_attempts: int = 100) -> int:
+    """Find a free port starting from start_port"""
+    for port in range(start_port, start_port + max_attempts):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('localhost', port))
+                return port
+        except OSError:
+            continue
+    raise RuntimeError(f"Could not find a free port in range {start_port}-{start_port + max_attempts}")
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     # Server
     api_port: int = Field(default_factory=lambda: int(os.getenv("API_PORT", os.getenv("PORT", 5050))))
+    host: str = Field(default=os.getenv("HOST", "0.0.0.0"))
     log_level: str = Field(default=os.getenv("LOG_LEVEL", "INFO"))
+    
+    # Dynamic Port Allocation
+    auto_find_port: bool = Field(default=os.getenv("AUTO_FIND_PORT", "false").lower() in {"1", "true", "yes"})
+    port_range_start: int = Field(default=int(os.getenv("PORT_RANGE_START", "5050")))
+    port_range_end: int = Field(default=int(os.getenv("PORT_RANGE_END", "5100")))
 
     # CORS
-    allow_origins: List[str] = Field(default_factory=lambda: _parse_csv(os.getenv("ALLOW_ORIGINS", "*")))
+    allow_origins: str = Field(default="*")
 
     # Auth
     api_key: Optional[str] = Field(default=os.getenv("API_KEY"))
@@ -45,7 +64,7 @@ class Settings(BaseSettings):
     vllm_base_url: Optional[str] = Field(default=os.getenv("VLLM_BASE_URL"))
 
     # Allowlist
-    allowed_models: List[str] = Field(default_factory=lambda: _parse_csv(os.getenv("ALLOWED_MODELS")))
+    allowed_models: str = Field(default="")
 
     # HTTP timeouts
     connect_timeout_seconds: float = Field(default=float(os.getenv("CONNECT_TIMEOUT_SECONDS", "10")))
@@ -56,6 +75,16 @@ class Settings(BaseSettings):
     # Database
     database_url: str = Field(default=os.getenv("DATABASE_URL", "sqlite:///./data/ai_backend.db"))
     db_echo: bool = Field(default=os.getenv("DB_ECHO", "false").lower() in {"1", "true", "yes"})
+
+    # Development
+    debug: bool = Field(default=os.getenv("DEBUG", "false").lower() in {"1", "true", "yes"})
+    reload: bool = Field(default=os.getenv("RELOAD", "true").lower() in {"1", "true", "yes"})
+
+    def get_available_port(self) -> int:
+        """Get an available port, either from config or by finding a free one"""
+        if self.auto_find_port:
+            return find_free_port(self.port_range_start, self.port_range_end - self.port_range_start)
+        return self.api_port
 
     def get_route_map(self) -> Dict[str, str]:
         routes: Dict[str, str] = {}
@@ -72,6 +101,18 @@ class Settings(BaseSettings):
             if not self.default_model_key:
                 self.default_model_key = "default"
         return routes
+
+    @property
+    def allow_origins_list(self) -> List[str]:
+        """Get allow_origins as a list"""
+        return _parse_csv(self.allow_origins)
+
+    @property
+    def allowed_models_list(self) -> List[str]:
+        """Get allowed_models as a list"""
+        return _parse_csv(self.allowed_models)
+
+
 
 
 @lru_cache(maxsize=1)

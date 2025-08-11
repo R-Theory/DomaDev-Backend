@@ -2,7 +2,7 @@
 setlocal
 
 echo ===============================================
-echo AI Backend Launcher (Dynamic Port Allocation)
+echo AI Backend Launcher (Fixed Port - Backup)
 echo ===============================================
 echo.
 
@@ -13,12 +13,14 @@ echo Script location: %SCRIPT_DIR%
 echo Project root: %UNC_PROJECT_PATH%
 
 REM ---- Config ----
+set "API_PORT=5050"
 set "VLLM_PORT=8000"
 set "MODEL_ID=TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 set "WSL_DISTRO="
 set "WSL_PROJECT_PATH=/Projects/Doma Backend/Program/ai-backend"
 set "GW_VENV=%USERPROFILE%\ai-backend-gateway-venv"
 set "DB_DIR=%USERPROFILE%\ai-backend-data"
+set "DATABASE_URL=sqlite:///%DB_DIR%/ai_backend.db"
 
 echo.
 echo [preflight] Checking tools...
@@ -43,62 +45,6 @@ if not exist "%UNC_PROJECT_PATH%\requirements.txt" (
     goto :fail_pause
 )
 
-REM Check for .env file, create if missing
-if not exist "%UNC_PROJECT_PATH%\.env" (
-    echo [info] Creating .env file with dynamic port configuration...
-    (
-        echo # Server Configuration
-        echo API_PORT=5050
-        echo HOST=0.0.0.0
-        echo LOG_LEVEL=INFO
-        echo.
-        echo # Dynamic Port Allocation
-        echo AUTO_FIND_PORT=true
-        echo PORT_RANGE_START=5050
-        echo PORT_RANGE_END=5100
-        echo.
-        echo # CORS Settings
-        echo ALLOW_ORIGINS=*
-        echo.
-        echo # Authentication
-        echo API_KEY=daf2bce30b362d2d6ae42d80865c08eefa0e7929cb255f88101fbeb053ba48ec
-        echo AUTH_REQUIRED=false
-        echo METRICS_PUBLIC=true
-        echo.
-        echo # Prometheus Metrics
-        echo PROMETHEUS_ENABLE=true
-        echo.
-        echo # Rate Limiting
-        echo RATE_LIMIT_PER_MIN=60
-        echo USE_REDIS=false
-        echo REDIS_URL=redis://localhost:6379
-        echo.
-        echo # vLLM Configuration
-        echo DEFAULT_MODEL_KEY=tiny
-        echo DEFAULT_MODEL_NAME=TinyLlama/TinyLlama-1.1B-Chat-v1.0
-        echo VLLM_BASE_URL=http://localhost:8000
-        echo MODEL_ROUTE_tiny=http://localhost:8000/v1
-        echo.
-        echo # Allowed Models
-        echo ALLOWED_MODELS=
-        echo.
-        echo # HTTP Timeouts
-        echo CONNECT_TIMEOUT_SECONDS=10
-        echo READ_TIMEOUT_SECONDS=60
-        echo WRITE_TIMEOUT_SECONDS=60
-        echo TOTAL_TIMEOUT_SECONDS=180
-        echo.
-        echo # Database
-        echo DATABASE_URL=sqlite:///%DB_DIR%/ai_backend.db
-        echo DB_ECHO=false
-        echo.
-        echo # Development Settings
-        echo DEBUG=false
-        echo RELOAD=true
-    ) > "%UNC_PROJECT_PATH%\.env"
-    echo [ok] Created .env file with dynamic port configuration
-)
-
 echo [ok] All checks passed!
 
 REM WSL command setup
@@ -114,24 +60,22 @@ REM Launch vLLM in WSL
 start "AI Server (WSL vLLM)" %WSL_CMD% -- bash -lc "echo 'Starting vLLM setup...'; export DEBIAN_FRONTEND=noninteractive; echo 'Installing system packages...'; sudo apt-get update -y && sudo apt-get install -y python3 python3-venv python3-pip; echo 'Changing to project directory...'; cd '%WSL_PROJECT_PATH%' || { echo 'ERROR: Cannot cd to %WSL_PROJECT_PATH%'; read -p 'Press Enter to close...'; exit 1; }; echo 'Setting up Python virtual environment...'; if [ ! -d .vllm-venv ]; then python3 -m venv .vllm-venv; fi; source .vllm-venv/bin/activate; echo 'Installing Python packages...'; python -m pip install --upgrade pip; python -m pip install vllm; echo 'Starting vLLM server...'; python -m vllm.entrypoints.openai.api_server --model '%MODEL_ID%' --host 0.0.0.0 --port %VLLM_PORT% --served-model-name '%MODEL_ID%' || { echo 'vLLM failed to start. Check the model name or internet connection.'; read -p 'Press Enter to close...'; }"
 
 echo.
-echo [2/2] Starting Gateway with Dynamic Port Allocation...
+echo [2/2] Starting Gateway on Windows (port %API_PORT%)...
 
-REM Create data directory if it doesn't exist
+REM Launch Gateway in PowerShell with execution policy bypass
+set "VLLM_BASE_URL=http://localhost:%VLLM_PORT%/v1"
 if not exist "%DB_DIR%" mkdir "%DB_DIR%"
-
-REM Launch Gateway with dynamic port allocation
-start "Gateway (Dynamic Port)" powershell -ExecutionPolicy Bypass -NoExit -Command "$ErrorActionPreference='Stop'; if (!(Test-Path '%GW_VENV%\Scripts\Activate.ps1')) { %PY_LAUNCH% -m venv '%GW_VENV%' }; & '%GW_VENV%\Scripts\Activate.ps1'; Set-Location '%UNC_PROJECT_PATH%'; pip install --upgrade pip; pip install -r 'requirements.txt'; $env:PYTHONPATH=(Get-Location).Path + '\'; echo 'Starting AI Backend with Dynamic Port Allocation...'; python start_server.py"
+start "Gateway (Windows)" powershell -ExecutionPolicy Bypass -NoExit -Command "$ErrorActionPreference='Stop'; $env:API_PORT='%API_PORT%'; $env:VLLM_BASE_URL='%VLLM_BASE_URL%'; $env:DATABASE_URL='%DATABASE_URL%'; if (!(Test-Path '%GW_VENV%\Scripts\Activate.ps1')) { %PY_LAUNCH% -m venv '%GW_VENV%' }; & '%GW_VENV%\Scripts\Activate.ps1'; Set-Location '%UNC_PROJECT_PATH%'; pip install --upgrade pip; pip install -r 'requirements.txt'; $env:PYTHONPATH=(Get-Location).Path + '\'; uvicorn app.main:app --host 0.0.0.0 --port $env:API_PORT"
 
 echo.
 echo ===============================================
 echo SUCCESS! Launched both servers:
 echo - vLLM (WSL): http://localhost:%VLLM_PORT%/v1
-echo - Gateway (Windows): Dynamic port allocation (check startup message)
+echo - Gateway (Windows): http://localhost:%API_PORT%
 echo.
-echo The gateway will automatically find an available port and show you:
-echo - The exact port it's using
-echo - The API documentation URL
-echo - Health check URL
+echo Test URLs:
+echo - Health: http://localhost:%API_PORT%/health
+echo - Models: http://localhost:%API_PORT%/api/models
 echo ===============================================
 echo.
 echo This window will stay open so you can see any messages.
@@ -146,5 +90,3 @@ pause >nul
 
 :end
 endlocal
-
-
