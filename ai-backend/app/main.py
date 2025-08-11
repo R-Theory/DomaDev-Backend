@@ -27,6 +27,14 @@ def create_app() -> FastAPI:
         pass
     settings = get_settings()
 
+    # Initialize database and tables
+    try:
+        from .db.base import create_all  # lazy import so env is loaded
+        create_all()
+    except Exception:
+        # Avoid failing app startup if DB init fails; routes may still be useful
+        pass
+
     app = FastAPI(title="AI Backend Gateway", version="0.1.0", openapi_url="/openapi.json")
 
     # Middleware
@@ -50,6 +58,12 @@ def create_app() -> FastAPI:
     api.include_router(models.router)
     api.include_router(chat.router)
     api.include_router(embeddings.router)
+    # Storage/search APIs
+    from .routers import conversations, messages, search, backup
+    api.include_router(conversations.router)
+    api.include_router(messages.router)
+    api.include_router(search.router)
+    api.include_router(backup.router)
 
     app.mount("/api", api)
 

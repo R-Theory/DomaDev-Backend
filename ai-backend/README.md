@@ -117,6 +117,25 @@ Body:
 ```
 Response is the upstream OpenAI-compatible JSON.
 
+### Storage & Search API
+
+#### Conversations
+- `POST /api/conversations` — create a conversation
+- `GET /api/conversations` — list conversations (pagination with `limit`, `offset`)
+- `GET /api/conversations/{id}` — get a conversation
+- `DELETE /api/conversations/{id}` — delete a conversation (cascades to messages)
+- `GET /api/conversations/{id}/messages` — list messages in a conversation (`order=asc|desc`)
+
+#### Messages
+- `GET /api/messages/{message_id}/raw` — retrieve gz-decompressed raw request/response JSON and raw SSE (if present)
+
+#### Search
+- `GET /api/search/messages?q=...&conversation_id=...&role=...&model=...` — FTS5 full-text search over `content_text`
+
+#### Notes
+- Chat endpoints persist user and assistant messages with gz-compressed raw payloads and raw SSE for streams (no data loss).
+- SQLite FTS5 powers full-text search; `DATABASE_URL` can be switched to Postgres later.
+
 ## Observability
 - `/metrics` exposes Prometheus metrics (protected unless `METRICS_PUBLIC=true`).
 - vLLM also exposes `/metrics` on its own ports; scrape both for a full picture.
@@ -130,6 +149,25 @@ Response is the upstream OpenAI-compatible JSON.
 pytest -q
 ```
 Tests use FastAPI test client and do not require a running vLLM.
+
+## Database & Migrations
+- Default DB: SQLite at `./data/ai_backend.db` (WAL mode). Override with `DATABASE_URL`.
+- Migrations via Alembic (configured in `alembic.ini`).
+
+Generate initial DB (auto): app creates tables on startup if missing.
+
+Run migrations manually:
+```bash
+cd ai-backend
+alembic upgrade head
+```
+
+Create a new migration after model changes:
+```bash
+alembic revision -m "describe change"
+# edit the generated file in alembic/versions/, then
+alembic upgrade head
+```
 
 ## Production notes
 - Use `systemd` units for both the API and vLLM processes.

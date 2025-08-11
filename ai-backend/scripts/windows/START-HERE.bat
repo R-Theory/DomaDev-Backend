@@ -19,6 +19,8 @@ set "MODEL_ID=TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 set "WSL_DISTRO="
 set "WSL_PROJECT_PATH=/Projects/Doma Backend/Program/ai-backend"
 set "GW_VENV=%USERPROFILE%\ai-backend-gateway-venv"
+set "DB_DIR=%USERPROFILE%\ai-backend-data"
+set "DATABASE_URL=sqlite:///%DB_DIR%/ai_backend.db"
 
 echo.
 echo [preflight] Checking tools...
@@ -38,7 +40,7 @@ if not defined PY_LAUNCH set "PY_LAUNCH=py -3"
 
 REM Check project files
 echo [preflight] Checking project files at: %UNC_PROJECT_PATH%
-if not exist "%UNC_PROJECT_PATH%requirements.txt" (
+if not exist "%UNC_PROJECT_PATH%\requirements.txt" (
     echo [error] requirements.txt not found at: %UNC_PROJECT_PATH%
     goto :fail_pause
 )
@@ -62,7 +64,8 @@ echo [2/2] Starting Gateway on Windows (port %API_PORT%)...
 
 REM Launch Gateway in PowerShell with execution policy bypass
 set "VLLM_BASE_URL=http://localhost:%VLLM_PORT%/v1"
-start "Gateway (Windows)" powershell -ExecutionPolicy Bypass -NoExit -Command "$env:API_PORT='%API_PORT%'; $env:VLLM_BASE_URL='%VLLM_BASE_URL%'; if (!(Test-Path '%GW_VENV%\Scripts\Activate.ps1')) { %PY_LAUNCH% -m venv '%GW_VENV%' }; & '%GW_VENV%\Scripts\Activate.ps1'; pip install -q --upgrade pip; pip install -q -r '%UNC_PROJECT_PATH%requirements.txt'; $env:PYTHONPATH='%UNC_PROJECT_PATH%'; uvicorn app.main:app --host 0.0.0.0 --port $env:API_PORT"
+if not exist "%DB_DIR%" mkdir "%DB_DIR%"
+start "Gateway (Windows)" powershell -ExecutionPolicy Bypass -NoExit -Command "$ErrorActionPreference='Stop'; $env:API_PORT='%API_PORT%'; $env:VLLM_BASE_URL='%VLLM_BASE_URL%'; $env:DATABASE_URL='%DATABASE_URL%'; if (!(Test-Path '%GW_VENV%\Scripts\Activate.ps1')) { %PY_LAUNCH% -m venv '%GW_VENV%' }; & '%GW_VENV%\Scripts\Activate.ps1'; Set-Location '%UNC_PROJECT_PATH%'; pip install --upgrade pip; pip install -r 'requirements.txt'; $env:PYTHONPATH=(Get-Location).Path + '\'; uvicorn app.main:app --host 0.0.0.0 --port $env:API_PORT"
 
 echo.
 echo ===============================================

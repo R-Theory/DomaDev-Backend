@@ -8,12 +8,15 @@ import requests
 import json
 import time
 import sys
+import os
 from typing import Dict, Any, Optional
 
 # Configuration
 GATEWAY_BASE_URL = "http://localhost:5050"
 VLLM_BASE_URL = "http://localhost:8000"
 TIMEOUT = 30
+API_KEY = os.environ.get("API_KEY")
+HEADERS = {"X-API-Key": API_KEY} if API_KEY else {}
 
 # Colors for output
 class Colors:
@@ -48,7 +51,13 @@ def print_test(test_name: str, success: bool, details: str = ""):
 def make_request(method: str, url: str, **kwargs) -> tuple[bool, Optional[Dict[Any, Any]], str]:
     """Make HTTP request and return (success, response_data, error_message)"""
     try:
-        response = requests.request(method, url, timeout=TIMEOUT, **kwargs)
+        # Merge default headers if not provided
+        headers = kwargs.pop("headers", None)
+        if headers is None:
+            headers = HEADERS
+        else:
+            headers = {**HEADERS, **headers}
+        response = requests.request(method, url, timeout=TIMEOUT, headers=headers, **kwargs)
         
         if response.status_code >= 400:
             return False, None, f"HTTP {response.status_code}: {response.text[:200]}"
@@ -200,8 +209,9 @@ def test_streaming_chat():
         print_colored("Testing Gateway Streaming...", Colors.YELLOW)
         response = requests.post(
             f"{GATEWAY_BASE_URL}/api/chat/stream",  # Correct endpoint for Gateway streaming
-            json=gateway_stream_payload, 
-            stream=True, 
+            json=gateway_stream_payload,
+            headers=HEADERS,
+            stream=True,
             timeout=TIMEOUT
         )
         
@@ -224,6 +234,84 @@ def test_streaming_chat():
     
     except Exception as e:
         print_test("Gateway Streaming Chat", False, f"Error: {str(e)}")
+
+
+def test_storage_and_search_endpoints():
+    """Test conversations/messages CRUD, search, and raw inspectors"""
+    print_header("STORAGE & SEARCH TESTS")
+
+    # Create conversation
+    success, conv, error = make_request("POST", f"{GATEWAY_BASE_URL}/api/conversations", json={"title": "Test Conv"})
+    if not success or not isinstance(conv, dict):
+        print_test("Create Conversation", False, error or "Invalid response")
+        return
+    conv_id = conv.get("id")
+    print_test("Create Conversation", True, f"id={conv_id}")
+
+    # Send chat tied to conversation
+    payload = {
+        "message": "This is a searchable storage test phrase",
+        "conversation_id": conv_id,
+        "max_tokens": 32,
+    }
+    success, data, error = make_request("POST", f"{GATEWAY_BASE_URL}/api/chat", json=payload)
+    if not success:
+        print_test("Chat (for storage)", False, error)
+        return
+    print_test("Chat (for storage)", True)
+
+    # List messages in conversation
+    success, msgs, error = make_request("GET", f"{GATEWAY_BASE_URL}/api/conversations/{conv_id}/messages")
+    if success and isinstance(msgs, list) and len(msgs) >= 1:
+        print_test("List Conversation Messages", True, f"count={len(msgs)}")
+    else:
+        print_test("List Conversation Messages", False, error or "No messages")
+        return
+
+    # Pick a message id (prefer assistant)
+    mid = None
+    for m in msgs:
+        if m.get("role") == "assistant":
+            mid = m.get("id")
+            break
+    if not mid:
+        mid = msgs[0].get("id")
+
+    # Get raw payloads
+    success, raw, error = make_request("GET", f"{GATEWAY_BASE_URL}/api/messages/{mid}/raw")
+    if success and isinstance(raw, dict):
+        print_test("Get Message Raw", True)
+    else:
+        print_test("Get Message Raw", False, error or "Invalid raw response")
+
+    # Search messages with FTS5
+    success, results, error = make_request(
+        "GET",
+        f"{GATEWAY_BASE_URL}/api/search/messages",
+        params={"q": "searchable", "conversation_id": conv_id},
+    )
+    if success and isinstance(results, list):
+        print_test("Search Messages", True, f"hits={len(results)}")
+    else:
+        print_test("Search Messages", False, error or "No search results")
+
+
+def test_backup_endpoints():
+    """Test export and import (idempotent)"""
+    print_header("BACKUP TESTS")
+    success, export, error = make_request("GET", f"{GATEWAY_BASE_URL}/api/backup/export")
+    if success and isinstance(export, dict):
+        convs = len(export.get("conversations", []))
+        msgs = len(export.get("messages", []))
+        print_test("Backup Export", True, f"conversations={convs}, messages={msgs}")
+        # Re-import same data (should dedupe)
+        success2, imported, error2 = make_request("POST", f"{GATEWAY_BASE_URL}/api/backup/import", json=export)
+        if success2 and isinstance(imported, dict):
+            print_test("Backup Import", True, f"imported={imported.get('imported', {})}")
+        else:
+            print_test("Backup Import", False, error2 or "Invalid import response")
+    else:
+        print_test("Backup Export", False, error or "Invalid export response")
 
 def test_performance():
     """Basic performance test"""
@@ -266,6 +354,8 @@ def main():
     test_chat_endpoints()
     test_embeddings_endpoints()
     test_streaming_chat()
+    test_storage_and_search_endpoints()
+    test_backup_endpoints()
     test_performance()
     
     print_header("TESTING COMPLETE")

@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     write_timeout_seconds: float = Field(default=float(os.getenv("WRITE_TIMEOUT_SECONDS", "60")))
     total_timeout_seconds: float = Field(default=float(os.getenv("TOTAL_TIMEOUT_SECONDS", "180")))
 
+    # Database
+    database_url: str = Field(default=os.getenv("DATABASE_URL", "sqlite:///./data/ai_backend.db"))
+    db_echo: bool = Field(default=os.getenv("DB_ECHO", "false").lower() in {"1", "true", "yes"})
+
     def get_route_map(self) -> Dict[str, str]:
         routes: Dict[str, str] = {}
         for key, value in os.environ.items():
