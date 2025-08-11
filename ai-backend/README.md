@@ -121,12 +121,16 @@ Response is the upstream OpenAI-compatible JSON.
 
 #### Conversations
 - `POST /api/conversations` — create a conversation
-- `GET /api/conversations` — list conversations (pagination with `limit`, `offset`)
+- `GET /api/conversations` — list conversations (pagination with `limit`, `offset`, ordered by pinned status then creation date)
 - `GET /api/conversations/{id}` — get a conversation
+- `PATCH /api/conversations/{id}` — update conversation (title, pinned status, metadata)
 - `DELETE /api/conversations/{id}` — delete a conversation (cascades to messages)
 - `GET /api/conversations/{id}/messages` — list messages in a conversation (`order=asc|desc`)
 
 #### Messages
+- `POST /api/conversations/{id}/messages` — add a simple message to conversation (non-streaming)
+- `PATCH /api/conversations/{id}/messages/{message_id}` — edit a message (content, role)
+- `DELETE /api/conversations/{id}/messages/{message_id}` — delete a message
 - `GET /api/messages/{message_id}/raw` — retrieve gz-decompressed raw request/response JSON and raw SSE (if present)
 
 #### Search
@@ -135,6 +139,44 @@ Response is the upstream OpenAI-compatible JSON.
 #### Notes
 - Chat endpoints persist user and assistant messages with gz-compressed raw payloads and raw SSE for streams (no data loss).
 - SQLite FTS5 powers full-text search; `DATABASE_URL` can be switched to Postgres later.
+- Conversations are ordered by pinned status (pinned first) then by creation date (newest first).
+- Individual message management allows editing and deleting messages without affecting the conversation structure.
+
+#### Example Usage
+
+**Conversation Management:**
+```bash
+# Create conversation
+curl -X POST http://localhost:5050/api/conversations \
+  -H "Content-Type: application/json" \
+  -d '{"title": "My Chat Session"}'
+
+# Pin conversation
+curl -X PATCH http://localhost:5050/api/conversations/{id} \
+  -H "Content-Type: application/json" \
+  -d '{"pinned": true}'
+
+# Update conversation title
+curl -X PATCH http://localhost:5050/api/conversations/{id} \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Updated Title"}'
+```
+
+**Message Management:**
+```bash
+# Add simple message
+curl -X POST http://localhost:5050/api/conversations/{id}/messages \
+  -H "Content-Type: application/json" \
+  -d '{"role": "user", "content_text": "Hello, how are you?"}'
+
+# Edit message
+curl -X PATCH http://localhost:5050/api/conversations/{id}/messages/{message_id} \
+  -H "Content-Type: application/json" \
+  -d '{"content_text": "Hello, how are you today?"}'
+
+# Delete message
+curl -X DELETE http://localhost:5050/api/conversations/{id}/messages/{message_id}
+```
 
 ## Observability
 - `/metrics` exposes Prometheus metrics (protected unless `METRICS_PUBLIC=true`).

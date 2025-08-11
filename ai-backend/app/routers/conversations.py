@@ -17,10 +17,17 @@ class ConversationCreate(BaseModel):
     metadata: Optional[dict[str, Any]] = None
 
 
+class ConversationUpdate(BaseModel):
+    title: Optional[str] = None
+    pinned: Optional[bool] = None
+    metadata: Optional[dict[str, Any]] = None
+
+
 class ConversationOut(BaseModel):
     id: str
     title: Optional[str] = None
     created_at: Any
+    pinned: bool = False
     metadata_json: Optional[dict[str, Any]] = None
 
     class Config:
@@ -62,7 +69,7 @@ def list_conversations(limit: int = Query(50, ge=1, le=200), offset: int = Query
     try:
         rows = (
             db.query(Conversation)
-            .order_by(Conversation.created_at.desc())
+            .order_by(Conversation.pinned.desc(), Conversation.created_at.desc())
             .offset(offset)
             .limit(limit)
             .all()
@@ -79,6 +86,28 @@ def get_conversation(conversation_id: str) -> ConversationOut:
         conv = db.get(Conversation, conversation_id)
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
+        return ConversationOut.model_validate(conv)
+    finally:
+        db.close()
+
+
+@router.patch("/{conversation_id}")
+def update_conversation(conversation_id: str, payload: ConversationUpdate) -> ConversationOut:
+    db = get_session()
+    try:
+        conv = db.get(Conversation, conversation_id)
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        if payload.title is not None:
+            conv.title = payload.title
+        if payload.pinned is not None:
+            conv.pinned = payload.pinned
+        if payload.metadata is not None:
+            conv.metadata_json = payload.metadata
+        
+        db.commit()
+        db.refresh(conv)
         return ConversationOut.model_validate(conv)
     finally:
         db.close()

@@ -18,19 +18,24 @@ kanban-plugin: board
 
 - [x] [P1][M] SQLite schema design: conversations, messages, metadata tables #Storage
 - [x] [P1][M] Chat API endpoints: `/api/conversations` (CRUD), `/api/conversations/{id}/messages` #Storage
-- [ ] [P1][S] Database migrations: version control, upgrade scripts, rollback support #Storage
+- [x] [P1][S] Database migrations: version control, upgrade scripts, rollback support #Storage
 - [x] [P1][M] Extensible storage layer: abstract interface for SQLite/PostgreSQL/cloud backends #Storage
 - [x] [P1][S] Backup/restore API: export conversations to JSON, import with deduplication #Storage (export/import MVP)
 - [x] [P1][S] Performance optimization: pagination, indexing, lazy loading for large conversations #Storage (indexes, pagination)
 - [x] [P1][M] Full-text search (FTS5) over messages #Storage
+- [x] [P1][M] Individual message management: DELETE/PATCH `/conversations/{id}/messages/{messageId}` #Storage
+- [x] [P1][M] Simple message addition: POST `/conversations/{id}/messages` (non-streaming) #Storage
+- [x] [P1][M] Conversation pinning: pinned field in schema and PATCH endpoint support #Storage
 
 
 ## Definition of Done — Phase 2.5
 
 - [x] Conversations persist in database and survive server restarts
 - [x] API endpoints support full CRUD operations for conversations and messages
-- [ ] Migration system handles schema upgrades without data loss
+- [x] Migration system handles schema upgrades without data loss
 - [x] Performance scales to thousands of conversations and messages (FTS + indexing)
+- [x] Individual message editing and deletion supported
+- [x] Conversation pinning and ordering by pinned status
 
 
 ## Phase 3: Models & Spaces API

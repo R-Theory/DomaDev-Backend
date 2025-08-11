@@ -59,9 +59,10 @@ def create_app() -> FastAPI:
     api.include_router(chat.router)
     api.include_router(embeddings.router)
     # Storage/search APIs
-    from .routers import conversations, messages, search, backup
+    from .routers import conversations, messages, search, backup, message_management
     api.include_router(conversations.router)
     api.include_router(messages.router)
+    api.include_router(message_management.router)
     api.include_router(search.router)
     api.include_router(backup.router)
 

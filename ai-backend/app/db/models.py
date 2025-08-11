@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, Integer, DateTime, ForeignKey, JSON, LargeBinary, Index
+from sqlalchemy import Column, String, Text, Integer, DateTime, ForeignKey, JSON, LargeBinary, Index, Boolean
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 
 from .base import Base
@@ -17,6 +17,7 @@ class Conversation(Base):
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_id)
     title = Column(String(200), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    pinned = Column(Boolean, default=False, nullable=False)
     metadata_json = Column(JSON, nullable=True)
 
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")

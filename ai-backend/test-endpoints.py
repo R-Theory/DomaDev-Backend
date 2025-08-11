@@ -313,6 +313,101 @@ def test_backup_endpoints():
     else:
         print_test("Backup Export", False, error or "Invalid export response")
 
+def test_new_conversation_and_message_features():
+    """Test new conversation pinning and individual message management features"""
+    print_header("NEW FEATURES TESTS")
+    
+    # Create a conversation
+    success, conv, error = make_request("POST", f"{GATEWAY_BASE_URL}/api/conversations", json={"title": "New Features Test"})
+    if not success or not isinstance(conv, dict):
+        print_test("Create Conversation (New Features)", False, error or "Invalid response")
+        return
+    conv_id = conv.get("id")
+    print_test("Create Conversation (New Features)", True, f"id={conv_id}")
+    
+    # Test conversation pinning
+    success, updated_conv, error = make_request("PATCH", f"{GATEWAY_BASE_URL}/api/conversations/{conv_id}", json={"pinned": True})
+    if success and isinstance(updated_conv, dict) and updated_conv.get("pinned") == True:
+        print_test("Pin Conversation", True, "Conversation pinned successfully")
+    else:
+        print_test("Pin Conversation", False, error or "Failed to pin conversation")
+    
+    # Test simple message addition
+    message_payload = {
+        "role": "user",
+        "content_text": "This is a test message for new features"
+    }
+    success, message, error = make_request("POST", f"{GATEWAY_BASE_URL}/api/conversations/{conv_id}/messages", json=message_payload)
+    if success and isinstance(message, dict):
+        message_id = message.get("id")
+        print_test("Add Simple Message", True, f"message_id={message_id}")
+    else:
+        print_test("Add Simple Message", False, error or "Failed to add message")
+        return
+    
+    # Test message editing
+    edit_payload = {
+        "content_text": "This is an updated test message for new features"
+    }
+    success, edited_message, error = make_request("PATCH", f"{GATEWAY_BASE_URL}/api/conversations/{conv_id}/messages/{message_id}", json=edit_payload)
+    if success and isinstance(edited_message, dict) and "updated" in edited_message.get("content_text", ""):
+        print_test("Edit Message", True, "Message updated successfully")
+    else:
+        print_test("Edit Message", False, error or "Failed to edit message")
+    
+    # Add another message to test deletion
+    message2_payload = {
+        "role": "assistant",
+        "content_text": "This is an assistant response"
+    }
+    success, message2, error = make_request("POST", f"{GATEWAY_BASE_URL}/api/conversations/{conv_id}/messages", json=message2_payload)
+    if success and isinstance(message2, dict):
+        message2_id = message2.get("id")
+        print_test("Add Second Message", True, f"message2_id={message2_id}")
+    else:
+        print_test("Add Second Message", False, error or "Failed to add second message")
+        return
+    
+    # Test message deletion
+    success, delete_result, error = make_request("DELETE", f"{GATEWAY_BASE_URL}/api/conversations/{conv_id}/messages/{message_id}")
+    if success and isinstance(delete_result, dict) and delete_result.get("deleted") == True:
+        print_test("Delete Message", True, "Message deleted successfully")
+    else:
+        print_test("Delete Message", False, error or "Failed to delete message")
+    
+    # Verify message was deleted by listing messages
+    success, messages, error = make_request("GET", f"{GATEWAY_BASE_URL}/api/conversations/{conv_id}/messages")
+    if success and isinstance(messages, list):
+        remaining_count = len(messages)
+        print_test("Verify Message Deletion", True, f"Remaining messages: {remaining_count}")
+    else:
+        print_test("Verify Message Deletion", False, error or "Failed to list messages")
+    
+    # Test conversation ordering (pinned first)
+    success, conversations, error = make_request("GET", f"{GATEWAY_BASE_URL}/api/conversations")
+    if success and isinstance(conversations, list) and len(conversations) > 0:
+        first_conv = conversations[0]
+        if first_conv.get("pinned") == True:
+            print_test("Conversation Ordering", True, "Pinned conversation appears first")
+        else:
+            print_test("Conversation Ordering", False, "Pinned conversation not first")
+    else:
+        print_test("Conversation Ordering", False, error or "Failed to list conversations")
+    
+    # Test error handling for non-existent resources
+    success, error_data, error = make_request("PATCH", f"{GATEWAY_BASE_URL}/api/conversations/nonexistent", json={"title": "Test"})
+    if not success and "404" in error:
+        print_test("Error Handling - Non-existent Conversation", True, "404 returned correctly")
+    else:
+        print_test("Error Handling - Non-existent Conversation", False, "Expected 404 error")
+    
+    success, error_data, error = make_request("PATCH", f"{GATEWAY_BASE_URL}/api/conversations/{conv_id}/messages/nonexistent", json={"content_text": "Test"})
+    if not success and "404" in error:
+        print_test("Error Handling - Non-existent Message", True, "404 returned correctly")
+    else:
+        print_test("Error Handling - Non-existent Message", False, "Expected 404 error")
+
+
 def test_performance():
     """Basic performance test"""
     print_header("PERFORMANCE TEST")
@@ -356,6 +451,7 @@ def main():
     test_streaming_chat()
     test_storage_and_search_endpoints()
     test_backup_endpoints()
+    test_new_conversation_and_message_features()
     test_performance()
     
     print_header("TESTING COMPLETE")
